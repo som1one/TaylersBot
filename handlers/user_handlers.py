@@ -51,7 +51,6 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
     def main_menu_markup():
         """Возвращает стандартную клавиатуру главного меню для всех пользователей."""
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add('🚀 Вступить в бойцовский клуб')
         markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
         return markup
 
