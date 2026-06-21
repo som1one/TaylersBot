@@ -106,6 +106,17 @@ if __name__ == '__main__':
     print("[INIT] Создаём все таблицы...")
     Base.metadata.create_all(bind=engine)
 
+    # Добавляем новые колонки, если их нет (create_all не обновляет существующие таблицы)
+    from sqlalchemy import inspect, text
+    inspector = inspect(engine)
+    tariff_columns = [c['name'] for c in inspector.get_columns('tariffs')]
+    if 'is_main' not in tariff_columns:
+        print("[INIT] Добавляем колонку is_main в таблицу tariffs...")
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE tariffs ADD COLUMN is_main BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+        print("[INIT] Колонка is_main добавлена.")
+
     print("[INIT] Инициализируем стандартные уведомления...")
     NotificationService.initialize_default_notifications()
 
