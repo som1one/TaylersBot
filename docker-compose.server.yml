@@ -1,0 +1,45 @@
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    container_name: tg_bot_postgres
+    environment:
+      POSTGRES_DB: tg_bot_db
+      POSTGRES_USER: tg_bot_user
+      POSTGRES_PASSWORD: tg_bot_password
+    ports:
+      - "5433:5432"  # Используем другой порт, чтобы не конфликтовать с существующим postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tg_bot_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tg_bot_user -d tg_bot_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Telegram Bot
+  bot:
+    image: greenteeea/delta:latest
+    container_name: kvt-bot
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # ВАЖНО: DATABASE_URL должен указывать на имя сервиса postgres внутри сети compose
+      DATABASE_URL: "postgresql+psycopg2://tg_bot_user:tg_bot_password@postgres:5432/tg_bot_db"
+    networks:
+      - tg_bot_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  tg_bot_network:
+    driver: bridge
+
