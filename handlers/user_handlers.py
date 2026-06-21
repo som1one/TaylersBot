@@ -153,7 +153,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             # Создаем клавиатуру с кнопками
             try:
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                markup.add('🚀 Вступить в марафон', '👑 Стать амбассадором')
+                markup.add('🚀 Вступить в марафон') #, '👑 Стать амбассадором'
                 markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
 
                 safe_send_message(
