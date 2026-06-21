@@ -48,6 +48,13 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             suffix = "дней"
         return f"{d} {suffix}"
 
+    def main_menu_markup():
+        """Возвращает стандартную клавиатуру главного меню для всех пользователей."""
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add('🚀 Вступить в бойцовский клуб')
+        markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
+        return markup
+
     # ==============================
     # /start
     # ==============================
@@ -152,15 +159,11 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             
             # Создаем клавиатуру с кнопками
             try:
-                markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                markup.add('🚀 Вступить в бойцовский клуб') #, '👑 Стать амбассадором'
-                markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
-
                 safe_send_message(
                     bot,
                     chat_id,
                     "Выберите действие:",
-                    reply_markup=markup
+                    reply_markup=main_menu_markup()
                 )
 
                 logger.info(f"[start_handler] Отправлено приветственное сообщение и клавиатура для {user_telegram_id}")
@@ -458,8 +461,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             markup.add(types.InlineKeyboardButton("Оплатить", callback_data=f"pay_tariff_{tariff.id}_{final_price}_{duration_days or 0}_{code if code != 'ПРОПУСТИТЬ' else ''}"))
             markup.add(types.InlineKeyboardButton("❌ Отмена", callback_data="cancel_payment"))
             
-            markup_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup_menu.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
+            markup_menu = main_menu_markup()
             
             safe_send_message(bot, message.chat.id, text, reply_markup=markup, reply_to_message_id=message.message_id)
             logger.info(f"[handle_promocode_step] Отправлено сообщение с подтверждением оплаты для пользователя {message.from_user.id}")
@@ -527,9 +529,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
                         logger.warning(f"[handle_pay_tariff] Не удалось добавить пользователя {user.telegram_id} в канал: {e}")
                 
                 safe_edit_message_text(bot, call.message.chat.id, call.message.message_id, "✅ Бесплатная подписка по промокоду активирована!")
-                markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
-                safe_send_message(bot, call.message.chat.id, "Выберите действие:", reply_markup=markup)
+                safe_send_message(bot, call.message.chat.id, "Выберите действие:", reply_markup=main_menu_markup())
                 logger.info(f"[handle_pay_tariff] Бесплатная подписка активирована для {user.telegram_id} с промокодом {promocode}")
                 return
             
@@ -581,9 +581,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
         logger.info(f"[cancel_payment] Получен callback_query 'cancel_payment' от пользователя {call.from_user.id}")
         try:
             safe_edit_message_text(bot, call.message.chat.id, call.message.message_id, "✅ Вы закрыли чек.")
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
-            safe_send_message(bot, call.message.chat.id, "Выберите действие:", reply_markup=markup)
+            safe_send_message(bot, call.message.chat.id, "Выберите действие:", reply_markup=main_menu_markup())
             logger.info(f"[cancel_payment] Чек закрыт, отправлено основное меню для {call.from_user.id}")
         except Exception as e:
             logger.error(f"[cancel_payment] Ошибка при отмене платежа для пользователя {call.from_user.id}: {e}", exc_info=True)
@@ -685,8 +683,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
                                 except Exception as e:
                                     logger.error(f"Ошибка отправки ссылки на канал пользователю {user.telegram_id}: {e}", exc_info=True)
                             
-                            main_menu = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                            main_menu.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
+                            main_menu = main_menu_markup()
                             safe_send_message(bot, call.message.chat.id, "Выберите действие:", reply_markup=main_menu)
                     finally:
                         db.close()
