@@ -153,7 +153,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             # Создаем клавиатуру с кнопками
             try:
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-                markup.add('🚀 Вступить в марафон') #, '👑 Стать амбассадором'
+                markup.add('🚀 Вступить') #, '👑 Стать амбассадором'
                 markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
 
                 safe_send_message(
@@ -172,7 +172,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
         except Exception as e:
             logger.error(f"[start_handler] Ошибка при отправке приветственного сообщения и клавиатуры для {user_telegram_id}: {e}", exc_info=True)
 
-    @bot.message_handler(func=lambda m: m.text == '🚀 Вступить в марафон')
+    @bot.message_handler(func=lambda m: m.text == '🚀 Вступить')
     def join_marathon_handler(message):
         """Обработчик кнопки 'Вступить в марафон'"""
         logger.info(f"[join_marathon_handler] Получено нажатие кнопки 'Вступить в марафон' от пользователя {message.from_user.id}")
