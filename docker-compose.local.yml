@@ -2,10 +2,8 @@ services:
   postgres:
     image: postgres:15
     container_name: tg_bot_postgres
-    environment:
-      POSTGRES_DB: tg_bot_db
-      POSTGRES_USER: tg_bot_user
-      POSTGRES_PASSWORD: tg_bot_password
+    env_file:
+      - .env
     ports:
       - "5433:5432" # чтобы не конфликтовать с локальным postgres на 5432
     volumes:
@@ -27,9 +25,7 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    environment:
-      # ВАЖНО: DATABASE_URL должен указывать на имя сервиса postgres внутри сети compose
-      DATABASE_URL: "postgresql+psycopg2://tg_bot_user:tg_bot_password@postgres:5432/tg_bot_db"
+    # environment variables are in .env
     networks:
       - tg_bot_network
     restart: unless-stopped

@@ -3,10 +3,8 @@ services:
   postgres:
     image: postgres:15
     container_name: tg_bot_postgres
-    environment:
-      POSTGRES_DB: tg_bot_db
-      POSTGRES_USER: tg_bot_user
-      POSTGRES_PASSWORD: tg_bot_password
+    env_file:
+      - .env
     ports:
       - "5433:5432"  # Используем порт 5433 для избежания конфликтов
     volumes:
@@ -29,8 +27,7 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    environment:
-      DATABASE_URL: "postgresql+psycopg2://tg_bot_user:tg_bot_password@postgres:5432/tg_bot_db"
+    # environment variables are in .env
     # используем настройки образа, без переопределения пользователя/директории
     networks:
       - tg_bot_network
