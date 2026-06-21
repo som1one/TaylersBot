@@ -3,7 +3,20 @@ import functools
 import telebot
 import traceback
 
+import re
+
 logger = logging.getLogger(__name__)
+
+def strip_premium_emoji(text: str) -> str:
+    """Убирает из текста премиум (кастомные) эмодзи Telegram.
+    
+    Боты не могут отправлять кастомные эмодзи — они хранятся как символы
+    вне базовой BMP-плоскости Unicode (кодпоинты > U+FFFF).
+    Функция удаляет все такие символы, оставляя обычный текст и стандартные эмодзи.
+    """
+    if not text:
+        return text
+    return re.sub(r'[\U00010000-\U0010FFFF]', '', text).strip()
 
 # Импортируем сервис логирования ошибок
 try:

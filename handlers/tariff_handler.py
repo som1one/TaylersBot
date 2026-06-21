@@ -7,6 +7,7 @@ from config import Config
 from services.payment_service_alt import PaymentService
 from services.user_service import UserService
 from services.link_protection_service import LinkProtectionService
+from handlers.error_handler import strip_premium_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def register_tariff_handlers(bot, payment_service=None):
                 text += f"   💰 Цена: **{tariff.price}₽**\n"
                 text += f"   ⏱️ Длительность: **{duration_text}**\n"
                 if tariff.description:
-                    text += f"   📝 {tariff.description}\n"
+                    text += f"   📝 {strip_premium_emoji(tariff.description)}\n"
                 text += "\n"
 
                 markup.add(types.InlineKeyboardButton(
@@ -125,7 +126,7 @@ def register_tariff_handlers(bot, payment_service=None):
                 text = f"💳 **Оплата тарифа '{tariff.name}'**\n\n"
                 text += f"💰 Сумма: **{tariff.price}₽**\n"
                 text += f"⏱️ Длительность: **{tariff.duration_days if tariff.duration_days else 'Навсегда'}**\n"
-                text += f"📝 Описание: {tariff.description or 'Нет описания'}\n\n"
+                text += f"📝 Описание: {strip_premium_emoji(tariff.description) or 'Нет описания'}\n\n"
                 text += f"🆔 ID платежа: `{payment_result['payment_id']}`\n\n"
 
                 confirmation_url = payment_result.get('confirmation_url')

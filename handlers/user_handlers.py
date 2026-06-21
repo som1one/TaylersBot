@@ -10,7 +10,7 @@ from database.connection import SessionLocal
 from config import Config
 from datetime import datetime, timedelta
 import logging
-from handlers.error_handler import safe_send_message, safe_edit_message_text, safe_answer_callback
+from handlers.error_handler import safe_send_message, safe_edit_message_text, safe_answer_callback, strip_premium_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -186,17 +186,9 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
                 logger.warning(f"[join_marathon_handler] Нет главного тарифа для пользователя {message.from_user.id}")
                 return
             
-            text = "🚀 Присоединяйтесь к марафону!\n\n"
-            text += (
-                f"📦 {main_tariff.name}\n"
-                f"   💰 Цена: {main_tariff.price}₽\n"
-                f"   ⏱️ Длительность: {format_duration(main_tariff.duration_days)}\n"
-            )
-            if main_tariff.description:
-                text += f"   📝 {main_tariff.description}\n"
-            
+            text = "🚀 Присоединяйтесь к марафону!\n\nВыберите подходящий тариф:"
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton(f"Купить {main_tariff.name} - {main_tariff.price}₽", callback_data=f"buy_tariff_{main_tariff.id}"))
+            markup.add(types.InlineKeyboardButton(f"{main_tariff.name} — {main_tariff.price}₽", callback_data=f"view_tariff_{main_tariff.id}"))
             markup.add(types.InlineKeyboardButton("К другим тарифам", callback_data="show_tariffs"))
             
             safe_send_message(bot, message.chat.id, text, reply_markup=markup)
@@ -280,18 +272,10 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
                 safe_send_message(bot, message.chat.id, "😔 К сожалению, сейчас нет доступных тарифов.")
                 logger.warning(f"[show_tariffs] Нет активных тарифов для пользователя {message.from_user.id}")
                 return
-            text = "💰 Доступные тарифы:\n\n"
+            text = "💰 Доступные тарифы:\n\nВыберите тариф, чтобы узнать подробности:"
             markup = types.InlineKeyboardMarkup()
             for tariff in tariffs:
-                text += (
-                    f"📦 {tariff.name}\n"
-                    f"   💰 Цена: {tariff.price}₽\n"
-                    f"   ⏱️ Длительность: {format_duration(tariff.duration_days)}\n"
-                )
-                if tariff.description:
-                    text += f"   📝 {tariff.description}\n"
-                text += "\n"
-                markup.add(types.InlineKeyboardButton(f"Купить {tariff.name} - {tariff.price}₽", callback_data=f"buy_tariff_{tariff.id}"))
+                markup.add(types.InlineKeyboardButton(f"{tariff.name} — {tariff.price}₽", callback_data=f"view_tariff_{tariff.id}"))
             safe_send_message(bot, message.chat.id, text, reply_markup=markup)
             logger.info(f"[show_tariffs] Отправлены доступные тарифы для пользователя {message.from_user.id}")
         finally:
@@ -346,10 +330,36 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             logger.error(f"[help_command] Ошибка при отправке сообщения помощи для пользователя {message.from_user.id}: {e}", exc_info=True)
             safe_send_message(bot, message.chat.id, "Произошла ошибка при получении информации о помощи.")
 
-    @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_tariff_') or call.data == 'show_tariffs')
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_tariff_') or call.data.startswith('view_tariff_') or call.data == 'show_tariffs')
     def handle_tariff_callback(call):
         logger.info(f"[handle_tariff_callback] Получен callback_query: {call.data} от пользователя {call.from_user.id}")
-        if call.data.startswith('buy_tariff_'):
+        if call.data.startswith('view_tariff_'):
+            tariff_id = int(call.data.split('_')[2])
+            db = SessionLocal()
+            try:
+                tariff = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+                if not tariff:
+                    safe_answer_callback(bot, call.id, "❌ Тариф не найден.")
+                    return
+                description_clean = strip_premium_emoji(tariff.description or '')
+                text = (
+                    f"📦 {tariff.name}\n"
+                    f"💰 Цена: {tariff.price}₽\n"
+                    f"⏱️ Длительность: {format_duration(tariff.duration_days)}\n"
+                )
+                if description_clean:
+                    text += f"\n{description_clean}"
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(f"Купить {tariff.name} - {tariff.price}₽", callback_data=f"buy_tariff_{tariff.id}"))
+                markup.add(types.InlineKeyboardButton("← Назад к тарифам", callback_data="show_tariffs"))
+                safe_send_message(bot, call.message.chat.id, text, reply_markup=markup)
+                logger.info(f"[handle_tariff_callback] Показан тариф {tariff_id} для пользователя {call.from_user.id}")
+            except Exception as e:
+                logger.error(f"[handle_tariff_callback] Ошибка при показе тарифа {tariff_id} для {call.from_user.id}: {e}", exc_info=True)
+                safe_answer_callback(bot, call.id, "❌ Произошла ошибка.")
+            finally:
+                db.close()
+        elif call.data.startswith('buy_tariff_'):
             tariff_id = int(call.data.split('_')[2])
             db = SessionLocal()
             try:
