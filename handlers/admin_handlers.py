@@ -790,16 +790,19 @@ def init_admin_handlers(bot):
                 f"💰 Текущая цена: {tariff.price}₽\n"
                 f"⏱️ Длительность: {tariff.duration_days} дней\n"
                 f"📝 Описание: {tariff.description or 'Не указано'}\n"
-                f"✅ Статус: {'Активен' if tariff.is_active else 'Неактивен'}\n\n"
+                f"✅ Статус: {'Активен' if tariff.is_active else 'Неактивен'}\n"
+                f"⭐️ Главный тариф: {'Да' if tariff.is_main else 'Нет'}\n\n"
                 f"Выберите действие:"
             )
 
             markup = types.InlineKeyboardMarkup(row_width=2)
+            main_btn_text = "⭐ Убрать из главных" if tariff.is_main else "⭐️ Сделать главным"
             markup.add(
                 types.InlineKeyboardButton("💰 Изменить цену", callback_data=f"edit_price_{tariff.id}"),
                 types.InlineKeyboardButton("⏱️ Изменить длительность", callback_data=f"edit_duration_{tariff.id}"),
                 types.InlineKeyboardButton("📝 Изменить описание", callback_data=f"edit_description_{tariff.id}"),
                 types.InlineKeyboardButton("✅/❌ Переключить статус", callback_data=f"toggle_tariff_{tariff.id}"),
+                types.InlineKeyboardButton(main_btn_text, callback_data=f"toggle_main_tariff_{tariff.id}"),
                 types.InlineKeyboardButton("🗑️ Удалить тариф", callback_data=f"delete_tariff_{tariff.id}"),
                 types.InlineKeyboardButton("🔙 Назад", callback_data="manage_tariffs")
             )
@@ -1037,6 +1040,37 @@ def init_admin_handlers(bot):
                 status = "активирован" if tariff.is_active else "деактивирован"
                 bot.answer_callback_query(call.id, f"✅ Тариф '{tariff.name}' {status}")
                 # Обновляем сообщение
+                edit_tariff(call)
+            else:
+                bot.answer_callback_query(call.id, "❌ Тариф не найден")
+        except Exception as e:
+            bot.answer_callback_query(call.id, f"❌ Ошибка: {e}")
+        finally:
+            db.close()
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('toggle_main_tariff_'))
+    def toggle_main_tariff(call):
+        if call.from_user.id not in Config.ADMIN_USER_IDS:
+            bot.answer_callback_query(call.id, "❌ Доступ запрещен")
+            return
+
+        tariff_id = int(call.data.split('_')[-1])
+        db = SessionLocal()
+        try:
+            tariff = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+            if tariff:
+                if not tariff.is_main:
+                    # Убираем флаг у всех остальных тарифов
+                    db.query(Tariff).update({"is_main": False})
+                    tariff.is_main = True
+                    db.commit()
+                    bot.answer_callback_query(call.id, f"✅ Тариф '{tariff.name}' сделан главным")
+                else:
+                    tariff.is_main = False
+                    db.commit()
+                    bot.answer_callback_query(call.id, f"✅ Тариф '{tariff.name}' убран из главных")
+                
+                # Обновляем меню
                 edit_tariff(call)
             else:
                 bot.answer_callback_query(call.id, "❌ Тариф не найден")

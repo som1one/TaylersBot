@@ -174,122 +174,38 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
 
     @bot.message_handler(func=lambda m: m.text == '🚀 Вступить')
     def join_marathon_handler(message):
-        """Обработчик кнопки 'Вступить в марафон'"""
-        logger.info(f"[join_marathon_handler] Получено нажатие кнопки 'Вступить в марафон' от пользователя {message.from_user.id}")
+        """Обработчик кнопки 'Вступить'"""
+        logger.info(f"[join_marathon_handler] Получено нажатие кнопки 'Вступить' от пользователя {message.from_user.id}")
         update_user_activity(message.from_user.id)
         
-        user_id = message.from_user.id
-        chat_id = message.chat.id
-        
+        db = SessionLocal()
         try:
-            # Проверяем, может ли пользователь вступить (не вышел ли недавно)
-            try:
-                if not MarathonService.can_user_join_marathon(user_id):
-                    safe_send_message(
-                        bot,
-                        chat_id,
-                        "⛔ Вы недавно выходили из марафона. Вы сможете вступить снова через 6 месяцев с момента выхода."
-                    )
-                    return
-            except Exception as e:
-                logger.error(f"[join_marathon_handler] Ошибка проверки возможности вступления для {user_id}: {e}", exc_info=True)
+            main_tariff = db.query(Tariff).filter(Tariff.is_main == True, Tariff.is_active == True).first()
+            if not main_tariff:
+                safe_send_message(bot, message.chat.id, "😔 К сожалению, сейчас нет доступных главных тарифов. Нажмите «💰 Тарифы» для просмотра всех вариантов.")
+                logger.warning(f"[join_marathon_handler] Нет главного тарифа для пользователя {message.from_user.id}")
+                return
             
-            # Проверяем, есть ли у пользователя активная подписка
-            try:
-                if MarathonService.user_has_active_subscription(user_id):
-                    safe_send_message(
-                        bot,
-                        chat_id,
-                        "✅ Вы уже состоите в марафоне! Доступ к материалам открыт."
-                    )
-                    return
-            except Exception as e:
-                logger.error(f"[join_marathon_handler] Ошибка проверки подписки для {user_id}: {e}", exc_info=True)
-            
-            # Получаем видео обращение
-            intro_video = MarathonService.get_marathon_intro_video()
-            
-            # Отправляем предупреждение
-            warning_message = (
-                "⚠️ ВАЖНО!\n\n"
-                "Если вы выйдете из марафона, вы не сможете вступить снова в течение 6 месяцев.\n\n"
-                "Убедитесь, что вы готовы пройти марафон полностью."
+            text = "🚀 Присоединяйтесь к марафону!\n\n"
+            text += (
+                f"📦 {main_tariff.name}\n"
+                f"   💰 Цена: {main_tariff.price}₽\n"
+                f"   ⏱️ Длительность: {format_duration(main_tariff.duration_days)}\n"
             )
-            safe_send_message(bot, chat_id, warning_message)
+            if main_tariff.description:
+                text += f"   📝 {main_tariff.description}\n"
             
-            # Отправляем видео обращение
-            if intro_video:
-                try:
-                    if intro_video.file_id and intro_video.file_type == 'video':
-                        try:
-                            bot.send_video(chat_id, intro_video.file_id, caption=intro_video.title or intro_video.description)
-                        except Exception as e:
-                            logger.warning(f"[join_marathon_handler] Ошибка отправки видео пользователю {user_id}: {e}")
-                    elif intro_video.file_id and intro_video.file_type == 'photo':
-                        try:
-                            bot.send_photo(chat_id, intro_video.file_id, caption=intro_video.title or intro_video.description)
-                        except Exception as e:
-                            logger.warning(f"[join_marathon_handler] Ошибка отправки фото пользователю {user_id}: {e}")
-                    elif intro_video.text_content:
-                        safe_send_message(bot, chat_id, intro_video.text_content)
-                    logger.info(f"[join_marathon_handler] Видео обращение отправлено пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"[join_marathon_handler] Ошибка отправки видео обращения пользователю {user_id}: {e}", exc_info=True)
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(f"Купить {main_tariff.name} - {main_tariff.price}₽", callback_data=f"buy_tariff_{main_tariff.id}"))
+            markup.add(types.InlineKeyboardButton("К другим тарифам", callback_data="show_tariffs"))
             
-            # Проверяем, не вступил ли пользователь уже в марафон
-            db = SessionLocal()
-            try:
-                from database.models import UserMarathonStatus
-                existing_status = db.query(UserMarathonStatus).filter_by(user_id=user_id).first()
-                
-                if existing_status and existing_status.status not in ['new']:
-                    # Пользователь уже в марафоне
-                    safe_send_message(
-                        bot,
-                        chat_id,
-                        f"✅ Вы уже участвуете в марафоне! Ваш текущий статус: {existing_status.status}\n\n"
-                        "Если вы хотите продлить подписку, выберите тариф ниже:"
-                    )
-                    try:
-                        show_tariffs(message)
-                    except Exception as e:
-                        logger.error(f"[join_marathon_handler] Ошибка показа тарифов для {user_id}: {e}", exc_info=True)
-                    return
-                
-                # Обновляем статус пользователя и открываем подписку (только если еще не вступил)
-                now = datetime.utcnow()
-                MarathonService.update_user_status(
-                    user_id,
-                    status='first_week',
-                    current_week=1,
-                    subscription_opened_at=now,
-                    last_cycle_start=now,
-                    posts_sent_in_cycle=0,
-                    last_post_sent_at=None  # Сбрасываем, чтобы первый пост отправился сразу
-                )
-                
-                # Логируем для отладки
-                logger.info(f"[join_marathon_handler] Пользователь {user_id} вступил в марафон, статус обновлен на 'first_week'")
-            finally:
-                db.close()
-            
-            # Показываем тарифы для покупки
-            safe_send_message(
-                bot,
-                chat_id,
-                "🎯 Вход в марафон открыт! Выберите тариф для участия:"
-            )
-            
-            # Вызываем обработчик показа тарифов
-            try:
-                show_tariffs(message)
-            except Exception as e:
-                logger.error(f"[join_marathon_handler] Ошибка показа тарифов для {user_id}: {e}", exc_info=True)
-                safe_send_message(bot, chat_id, "Ошибка загрузки тарифов. Попробуйте позже.")
-            
+            safe_send_message(bot, message.chat.id, text, reply_markup=markup)
+            logger.info(f"[join_marathon_handler] Отправлен главный тариф для пользователя {message.from_user.id}")
         except Exception as e:
-            logger.error(f"[join_marathon_handler] Критическая ошибка обработки вступления в марафон для пользователя {user_id}: {e}", exc_info=True)
-            safe_send_message(bot, chat_id, "❌ Произошла ошибка. Пожалуйста, попробуйте позже.")
+            logger.error(f"[join_marathon_handler] Ошибка при обработке 'Вступить' для {message.from_user.id}: {e}", exc_info=True)
+            safe_send_message(bot, message.chat.id, "Произошла ошибка при получении информации.")
+        finally:
+            db.close()
     
     @bot.message_handler(func=lambda m: m.text == '👑 Стать амбассадором')
     def become_ambassador_handler(message):

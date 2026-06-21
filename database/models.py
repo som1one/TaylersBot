@@ -35,6 +35,7 @@ class Tariff(Base):
     duration_days = Column(Integer, nullable=False)
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True)
+    is_main = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Отношения
