@@ -89,7 +89,6 @@ def init_admin_handlers(bot):
     def return_to_main_menu(message):
         """Возвращает пользователя к основному меню"""
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add('🚀 Вступить в бойцовский клуб')
         markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
         bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
 
@@ -270,7 +269,6 @@ def init_admin_handlers(bot):
         elif message.text == '❌ Выйти из админ-панели':
             print("[LOG] Выход из админ-панели")
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add('🚀 Вступить в бойцовский клуб')
             markup.add('💰 Тарифы', '📱 Моя подписка', 'ℹ️ Помощь')
             bot.send_message(message.chat.id, "👋 Вы вышли из админ-панели.", reply_markup=markup)
 
