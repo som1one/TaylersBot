@@ -237,7 +237,7 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
         try:
             text = (
                 "ℹ️ Помощь\n\n"
-                "Если у вас возникли вопросы, обратитесь к @deltasmaxxx.\n"
+                "Если у вас возникли вопросы, обратитесь к @igorneose.\n"
             )
             safe_send_message(bot, message.chat.id, text)
             logger.info(f"[help_command] Отправлено сообщение помощи для пользователя {message.from_user.id}")
