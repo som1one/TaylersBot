@@ -83,10 +83,16 @@ def register_handlers(bot):
     from handlers.user_handlers import register_user_handlers
     from handlers.admin_handlers import init_admin_handlers
     from handlers.tariff_handler import register_tariff_handlers
+    from services.crypto_pay_service import CryptoPayService
+
+    crypto_pay_service = CryptoPayService(
+        telegram_channel_service=telegram_channel_service,
+        purchase_notification_service=purchase_notification_service
+    )
 
     init_admin_handlers(bot)
     register_user_handlers(bot, payment_service, telegram_channel_service)
-    register_tariff_handlers(bot, payment_service)
+    register_tariff_handlers(bot, payment_service, crypto_pay_service)
 
     # Подхватываем админов из БД на старте
     try:

@@ -6,6 +6,8 @@ from flask import Flask, request, jsonify
 import telebot # Import telebot
 from services.payment_service_alt import PaymentService
 from services.telegram_channel_service import TelegramChannelService # Import TelegramChannelService
+from services.crypto_pay_service import CryptoPayService
+from services.purchase_notification_service import PurchaseNotificationService
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,11 @@ app = Flask(__name__)
 bot = telebot.TeleBot(Config.TELEGRAM_BOT_TOKEN) # Initialize bot here
 telegram_channel_service = TelegramChannelService(bot) # Initialize TelegramChannelService
 payment_service = PaymentService(telegram_channel_service=telegram_channel_service) # Pass channel service to PaymentService
+purchase_notification_service = PurchaseNotificationService(bot)
+crypto_pay_service = CryptoPayService(
+    telegram_channel_service=telegram_channel_service,
+    purchase_notification_service=purchase_notification_service
+)
 
 @app.route('/webhook/yookassa', methods=['POST'])
 def yookassa_webhook():
@@ -77,6 +84,33 @@ def verify_signature(data, signature):
     # Здесь можно добавить проверку подписи, если она настроена в ЮKassa
     # Пока что возвращаем True
     return True
+
+
+@app.route('/webhook/cryptopay', methods=['POST'])
+def cryptopay_webhook():
+    """Processes CryptoPay webhook notifications."""
+    try:
+        body = request.get_data()
+        signature = request.headers.get('crypto-pay-api-signature', '')
+
+        if not crypto_pay_service.verify_webhook_signature(body, signature):
+            logger.warning("CryptoPay webhook: invalid signature")
+            return jsonify({"error": "Unauthorized"}), 401
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "ok"}), 200
+
+        update_type = data.get("update_type")
+
+        if update_type == "invoice_paid":
+            payload = data.get("payload", {})
+            crypto_pay_service.process_webhook(payload)
+
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logger.error(f"Ошибка обработки CryptoPay webhook: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():

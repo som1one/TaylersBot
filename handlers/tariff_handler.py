@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 user_tariff_data = {}
 
-def register_tariff_handlers(bot, payment_service=None):
+def register_tariff_handlers(bot, payment_service=None, crypto_pay_service=None):
     """Регистрирует обработчики для работы с тарифами"""
 
     if payment_service is None:
@@ -62,9 +62,31 @@ def register_tariff_handlers(bot, payment_service=None):
         finally:
             db.close()
 
+    def _show_payment_method_selector(call, tariff_id, tariff_name, tariff_price):
+        """Показывает клавиатуру выбора способа оплаты"""
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("💳 Оплата картой", callback_data=f"pay_card_{tariff_id}")
+        )
+        if Config.CRYPTO_WALLET_ADDRESS:
+            markup.add(
+                types.InlineKeyboardButton("🪙 Оплата криптовалютой", callback_data=f"pay_crypto_{tariff_id}")
+            )
+
+        text = f"💰 Тариф: **{tariff_name}** — {tariff_price}₽\n\n"
+        text += "Выберите способ оплаты:"
+
+        bot.edit_message_text(
+            text,
+            call.message.chat.id,
+            call.message.message_id,
+            reply_markup=markup,
+            parse_mode='Markdown'
+        )
+
     @bot.callback_query_handler(func=lambda call: call.data.startswith('buy_tariff_'))
     def handle_buy_tariff(call):
-        """Обрабатывает покупку тарифа"""
+        """Обрабатывает покупку тарифа — показывает выбор способа оплаты"""
         
         # Обновляем активность пользователя
         update_user_activity(call.from_user.id)
@@ -107,6 +129,54 @@ def register_tariff_handlers(bot, payment_service=None):
                 )
                 return
 
+            # Показываем выбор способа оплаты
+            _show_payment_method_selector(call, tariff_id, tariff.name, tariff.price)
+            bot.answer_callback_query(call.id)
+
+        except Exception as e:
+            bot.answer_callback_query(call.id, f"❌ Ошибка: {e}")
+        finally:
+            db.close()
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('confirm_replace_'))
+    def handle_confirm_replace(call):
+        """После подтверждения замены подписки — показываем выбор способа оплаты"""
+        update_user_activity(call.from_user.id)
+        db = SessionLocal()
+        try:
+            tariff_id = int(call.data.split('_')[2])
+
+            tariff = db.query(Tariff).filter(Tariff.id == tariff_id, Tariff.is_active == True).first()
+            if not tariff:
+                bot.answer_callback_query(call.id, "❌ Тариф не найден или неактивен")
+                return
+
+            _show_payment_method_selector(call, tariff_id, tariff.name, tariff.price)
+            bot.answer_callback_query(call.id)
+
+        except Exception as e:
+            bot.answer_callback_query(call.id, f"❌ Ошибка: {e}")
+        finally:
+            db.close()
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pay_card_'))
+    def handle_pay_card(call):
+        """Обрабатывает оплату картой через YooKassa"""
+        update_user_activity(call.from_user.id)
+        db = SessionLocal()
+        try:
+            tariff_id = int(call.data.split('_')[2])
+
+            tariff = db.query(Tariff).filter(Tariff.id == tariff_id, Tariff.is_active == True).first()
+            if not tariff:
+                bot.answer_callback_query(call.id, "❌ Тариф не найден или неактивен")
+                return
+
+            user = UserService.get_user_by_telegram_id(call.from_user.id)
+            if not user:
+                bot.answer_callback_query(call.id, "❌ Пользователь не найден")
+                return
+
             payment_result = payment_service.create_payment(
                 user_id=user.telegram_id,
                 tariff_id=tariff.id,
@@ -120,9 +190,10 @@ def register_tariff_handlers(bot, payment_service=None):
                     from services.notification_sender_service import NotificationSenderService
                     temp_notification_service = NotificationSenderService(bot)
                     temp_notification_service.schedule_user_activity_notification(user.telegram_id, 'payment_not_completed')
-                    logger.info(f"[handle_buy_tariff] Запланировано уведомление о неоконченной оплате для пользователя {user.telegram_id}")
+                    logger.info(f"[handle_pay_card] Запланировано уведомление о неоконченной оплате для пользователя {user.telegram_id}")
                 except Exception as e:
-                    logger.error(f"[handle_buy_tariff] Ошибка планирования уведомления для {user.telegram_id}: {e}")
+                    logger.error(f"[handle_pay_card] Ошибка планирования уведомления для {user.telegram_id}: {e}")
+
                 text = f"💳 **Оплата тарифа '{tariff.name}'**\n\n"
                 text += f"💰 Сумма: **{tariff.price}₽**\n"
                 text += f"⏱️ Длительность: **{tariff.duration_days if tariff.duration_days else 'Навсегда'}**\n"
@@ -154,5 +225,57 @@ def register_tariff_handlers(bot, payment_service=None):
 
         except Exception as e:
             bot.answer_callback_query(call.id, f"❌ Ошибка: {e}")
+        finally:
+            db.close()
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pay_crypto_'))
+    def handle_pay_crypto(call):
+        """Показывает адрес кошелька и инструкцию для ручной оплаты криптой"""
+        update_user_activity(call.from_user.id)
+        db = SessionLocal()
+        try:
+            tariff_id = int(call.data.split('_')[2])
+
+            tariff = db.query(Tariff).filter(Tariff.id == tariff_id, Tariff.is_active == True).first()
+            if not tariff:
+                bot.answer_callback_query(call.id, "❌ Тариф не найден или неактивен")
+                return
+
+            wallet = Config.CRYPTO_WALLET_ADDRESS
+            network = Config.CRYPTO_WALLET_NETWORK
+            admin_username = Config.CRYPTO_ADMIN_USERNAME
+
+            text = f"🪙 **Оплата криптовалютой — тариф '{tariff.name}'**\n\n"
+            text += f"💰 Сумма: **{tariff.price}₽**\n"
+            text += f"⏱️ Длительность: **{tariff.duration_days if tariff.duration_days else 'Навсегда'}**\n\n"
+            text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            text += f"📋 **Адрес кошелька ({network}):**\n"
+            text += f"`{wallet}`\n\n"
+            text += f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            text += f"📌 **Инструкция:**\n"
+            text += f"1. Переведите сумму на адрес выше\n"
+            text += f"2. Отправьте скриншот чека: @{admin_username.lstrip('@')}\n"
+            text += f"3. Подписка будет активирована после проверки\n"
+
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            markup.add(
+                types.InlineKeyboardButton(f"💬 Отправить чек @{admin_username.lstrip('@')}", url=f"https://t.me/{admin_username.lstrip('@')}")
+            )
+            markup.add(
+                types.InlineKeyboardButton("◀️ Назад", callback_data=f"buy_tariff_{tariff_id}")
+            )
+
+            bot.edit_message_text(
+                text,
+                call.message.chat.id,
+                call.message.message_id,
+                reply_markup=markup,
+                parse_mode='Markdown'
+            )
+            bot.answer_callback_query(call.id)
+
+        except Exception as e:
+            logger.error(f"[handle_pay_crypto] Ошибка для пользователя {call.from_user.id}: {e}")
+            bot.answer_callback_query(call.id, "❌ Ошибка. Попробуйте позже.")
         finally:
             db.close()

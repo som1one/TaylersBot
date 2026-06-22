@@ -24,5 +24,10 @@ class Config:
     # Telegram Group ID for purchase notifications
     TELEGRAM_NOTIFICATIONS_GROUP_ID = os.getenv("TELEGRAM_NOTIFICATIONS_GROUP_ID", None)
     
+    # Crypto (ручная оплата)
+    CRYPTO_WALLET_ADDRESS = os.getenv("CRYPTO_WALLET_ADDRESS", "")  # Адрес кошелька для оплаты
+    CRYPTO_WALLET_NETWORK = os.getenv("CRYPTO_WALLET_NETWORK", "USDT TRC-20")  # Сеть
+    CRYPTO_ADMIN_USERNAME = os.getenv("CRYPTO_ADMIN_USERNAME", "")  # @username админа для чеков
+
     # Bot Settings
     BOT_NAME = os.getenv('BOT_NAME', 'TelegramBot')
