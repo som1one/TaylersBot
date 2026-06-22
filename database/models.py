@@ -67,11 +67,9 @@ class Payment(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(BigInteger, ForeignKey("users.telegram_id"), nullable=False)
     subscription_id = Column(Integer, ForeignKey("public.subscriptions.id"), nullable=True)  # <-- указываем схему
-    yookassa_payment_id = Column(String, unique=True, nullable=True)  # nullable for crypto-only payments
+    yookassa_payment_id = Column(String, unique=True, nullable=False)
     amount = Column(Float, nullable=False)
     status = Column(String, nullable=False)
-    payment_provider = Column(String, nullable=False, default="yookassa")  # "yookassa" or "cryptopay"
-    cryptopay_invoice_id = Column(String, unique=True, nullable=True)  # CryptoPay invoice ID
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 
