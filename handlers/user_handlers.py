@@ -369,8 +369,18 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
             text += f"К оплате: {final_price}₽\n"
             text += f"Длительность: {format_duration(duration_days)}"
             
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("Оплатить", callback_data=f"pay_tariff_{tariff.id}_{final_price}_{duration_days or 0}_{code if code != 'ПРОПУСТИТЬ' else ''}"))
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            code_for_callback = code if code != 'ПРОПУСТИТЬ' else ''
+            markup.add(types.InlineKeyboardButton(
+                "💳 Оплатить картой",
+                callback_data=f"pay_tariff_{tariff.id}_{final_price}_{duration_days or 0}_{code_for_callback}"
+            ))
+            # Кнопка криптовалюты только если бесплатной активации нет и кошелёк настроен
+            if final_price > 0 and Config.CRYPTO_WALLET_ADDRESS:
+                markup.add(types.InlineKeyboardButton(
+                    "🪙 Оплатить криптой",
+                    callback_data=f"pay_crypto_{tariff.id}_{final_price}_{duration_days or 0}_{code_for_callback}"
+                ))
             markup.add(types.InlineKeyboardButton("❌ Отмена", callback_data="cancel_payment"))
             
             markup_menu = main_menu_markup()
@@ -485,6 +495,68 @@ def register_user_handlers(bot, payment_service=None, telegram_channel_service=N
         except Exception as e:
             logger.error(f"[handle_pay_tariff] Ошибка при обработке платежа для пользователя {call.from_user.id}: {e}", exc_info=True)
             safe_answer_callback(bot, call.id, "❌ Произошла ошибка при обработке платежа.")
+        finally:
+            db.close()
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith('pay_crypto_'))
+    def handle_pay_crypto(call):
+        """Показывает адрес кошелька и инструкцию для ручной оплаты криптой."""
+        logger.info(f"[handle_pay_crypto] callback: {call.data} от {call.from_user.id}")
+        parts = call.data.split('_')
+        # формат: pay_crypto_<tariff_id>_<final_price>_<duration_days>_<promocode>
+        try:
+            tariff_id = int(parts[2])
+            final_price = float(parts[3])
+            duration_days = int(parts[4]) if parts[4] != '0' else None
+        except (IndexError, ValueError) as e:
+            logger.error(f"[handle_pay_crypto] Ошибка парсинга callback: {e}")
+            safe_answer_callback(bot, call.id, "❌ Ошибка.")
+            return
+
+        db = SessionLocal()
+        try:
+            tariff = db.query(Tariff).filter(Tariff.id == tariff_id).first()
+            if not tariff:
+                safe_answer_callback(bot, call.id, "❌ Тариф не найден.")
+                return
+
+            wallet = Config.CRYPTO_WALLET_ADDRESS
+            network = Config.CRYPTO_WALLET_NETWORK
+            admin_username = Config.CRYPTO_ADMIN_USERNAME.lstrip('@')
+
+            text = (
+                f"🪙 *Оплата криптовалютой — {tariff.name}*\n\n"
+                f"💰 Сумма: *{final_price}₽* (в эквиваленте USDT по курсу)\n"
+                f"⏱️ Длительность: *{format_duration(duration_days)}*\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"📋 *Адрес кошелька ({network}):*\n"
+                f"`{wallet}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"📌 *Инструкция:*\n"
+                f"1. Переведите сумму на адрес выше\n"
+                f"2. Отправьте скриншот чека: @{admin_username}\n"
+                f"3. Подписка активируется после проверки"
+            )
+
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            markup.add(types.InlineKeyboardButton(
+                f"💬 Отправить чек @{admin_username}",
+                url=f"https://t.me/{admin_username}"
+            ))
+            markup.add(types.InlineKeyboardButton("❌ Отмена", callback_data="cancel_payment"))
+
+            safe_edit_message_text(
+                bot,
+                call.message.chat.id,
+                call.message.message_id,
+                text,
+                reply_markup=markup,
+                parse_mode='Markdown'
+            )
+            safe_answer_callback(bot, call.id)
+        except Exception as e:
+            logger.error(f"[handle_pay_crypto] Ошибка: {e}", exc_info=True)
+            safe_answer_callback(bot, call.id, "❌ Ошибка.")
         finally:
             db.close()
 
