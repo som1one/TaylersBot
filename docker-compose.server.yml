@@ -27,7 +27,8 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    # environment variables are in .env
+    ports:
+      - "5000:5000"  # Webhook сервер для CryptoPay / YooKassa
     networks:
       - tg_bot_network
     restart: unless-stopped

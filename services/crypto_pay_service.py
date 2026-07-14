@@ -139,8 +139,10 @@ class CryptoPayService:
         Verifies CryptoPay webhook signature using HMAC-SHA-256.
         The secret is SHA-256 hash of the API token.
         """
+        if not self.api_token:
+            return False
         secret = hashlib.sha256(self.api_token.encode()).digest()
-        expected = hmac.new(secret, body, hashlib.sha256).hexdigest()
+        expected = hmac.HMAC(secret, body, hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, signature)
 
     def process_webhook(self, data: dict) -> bool:

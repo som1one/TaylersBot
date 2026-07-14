@@ -14,6 +14,7 @@ from services.notification_sender_service import NotificationSenderService
 from services.user_activity_service import UserActivityService
 from services.marathon_mailing_service import MarathonMailingService
 from services.purchase_notification_service import PurchaseNotificationService
+from services.crypto_pay_service import CryptoPayService
 from database.connection import SessionLocal, engine
 from database.models import Admin, Base
 
@@ -21,6 +22,10 @@ bot = telebot.TeleBot(Config.TELEGRAM_BOT_TOKEN)
 telegram_channel_service = TelegramChannelService(bot)
 purchase_notification_service = PurchaseNotificationService(bot)
 payment_service = PaymentService(
+    telegram_channel_service=telegram_channel_service,
+    purchase_notification_service=purchase_notification_service
+)
+crypto_pay_service = CryptoPayService(
     telegram_channel_service=telegram_channel_service,
     purchase_notification_service=purchase_notification_service
 )
@@ -77,6 +82,15 @@ def check_expired_subscriptions_task():
 def start_bot_polling():
     print("[BOT] Запуск polling...")
     bot.infinity_polling()
+
+
+def start_webhook_server():
+    """Запускает Flask webhook-сервер в отдельном потоке."""
+    from webhook_handler import app
+    import logging
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    print("[WEBHOOK] Запуск webhook-сервера на порту 5000...")
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 
 def register_handlers(bot):
@@ -138,6 +152,11 @@ if __name__ == '__main__':
     
     print("[INIT] Запускаем сервис рассылок марафона...")
     marathon_mailing_service.start()
+
+    # Запускаем webhook-сервер в отдельном потоке
+    print("[INIT] Запускаем webhook-сервер (Flask, порт 5000)...")
+    webhook_thread = threading.Thread(target=start_webhook_server, daemon=True)
+    webhook_thread.start()
 
     # Запускаем polling в отдельном потоке для лучшей логики старта
     bot_thread = threading.Thread(target=start_bot_polling, daemon=True)

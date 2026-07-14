@@ -26,6 +26,13 @@ class TelegramChannelService:
                 logger.error(f"Ошибка проверки прав бота в канале {self.channel_id}: {e}")
                 return False
 
+            # Снимаем бан, если пользователя ранее кикнули за истёкшую подписку:
+            # kick_chat_member банит навсегда, и без разбана инвайт-ссылка не сработает
+            try:
+                self.bot.unban_chat_member(self.channel_id, user_id, only_if_banned=True)
+            except Exception as e:
+                logger.warning(f"[add_user_to_channel] Не удалось снять бан с пользователя {user_id}: {e}")
+
             # Создаем уникальную ссылку на канал, действительную 10 минут (600 секунд)
             join_link = self.bot.create_chat_invite_link(
                 chat_id=self.channel_id,

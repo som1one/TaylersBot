@@ -6,6 +6,8 @@ from flask import Flask, request, jsonify
 import telebot # Import telebot
 from services.payment_service_alt import PaymentService
 from services.telegram_channel_service import TelegramChannelService # Import TelegramChannelService
+from services.crypto_pay_service import CryptoPayService
+from services.purchase_notification_service import PurchaseNotificationService
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -14,7 +16,12 @@ app = Flask(__name__)
 
 bot = telebot.TeleBot(Config.TELEGRAM_BOT_TOKEN) # Initialize bot here
 telegram_channel_service = TelegramChannelService(bot) # Initialize TelegramChannelService
+purchase_notification_service = PurchaseNotificationService(bot)
 payment_service = PaymentService(telegram_channel_service=telegram_channel_service) # Pass channel service to PaymentService
+crypto_pay_service = CryptoPayService(
+    telegram_channel_service=telegram_channel_service,
+    purchase_notification_service=purchase_notification_service
+)
 
 @app.route('/webhook/yookassa', methods=['POST'])
 def yookassa_webhook():
@@ -77,6 +84,46 @@ def verify_signature(data, signature):
     # Здесь можно добавить проверку подписи, если она настроена в ЮKassa
     # Пока что возвращаем True
     return True
+
+
+@app.route('/webhook/cryptopay', methods=['POST'])
+def cryptopay_webhook():
+    """Обрабатывает вебхуки от CryptoPay (Crypto Bot)"""
+    try:
+        # Получаем raw body для проверки подписи
+        raw_body = request.get_data()
+        data = request.get_json()
+
+        if not data:
+            logger.error("Получен пустой webhook от CryptoPay")
+            return jsonify({"error": "Empty webhook"}), 400
+
+        # Проверяем подпись
+        signature = request.headers.get("crypto-pay-api-signature", "")
+        if not crypto_pay_service.verify_webhook_signature(raw_body, signature):
+            logger.error("CryptoPay webhook: неверная подпись")
+            return jsonify({"error": "Invalid signature"}), 403
+
+        # CryptoPay присылает обновления в формате:
+        # {"update_id": ..., "update_type": "invoice_paid", "request_date": ..., "payload": {...}}
+        update_type = data.get("update_type", "")
+        payload = data.get("payload", {})
+
+        logger.info(f"CryptoPay webhook: update_type={update_type}")
+
+        if update_type == "invoice_paid":
+            success = crypto_pay_service.process_webhook(payload)
+            if success:
+                return jsonify({"status": "success"}), 200
+            else:
+                return jsonify({"error": "Processing failed"}), 500
+        else:
+            logger.info(f"CryptoPay webhook: неизвестный update_type={update_type}, игнорируем")
+            return jsonify({"status": "ignored"}), 200
+
+    except Exception as e:
+        logger.error(f"Ошибка обработки CryptoPay webhook: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/health', methods=['GET'])

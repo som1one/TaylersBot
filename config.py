@@ -29,5 +29,9 @@ class Config:
     CRYPTO_WALLET_NETWORK = os.getenv("CRYPTO_WALLET_NETWORK", "USDT TRC-20")  # Сеть
     CRYPTO_ADMIN_USERNAME = os.getenv("CRYPTO_ADMIN_USERNAME", "")  # @username админа для чеков
 
+    # CryptoPay (Crypto Bot)
+    CRYPTOPAY_API_TOKEN = os.getenv("CRYPTOPAY_API_TOKEN", "")
+    CRYPTOPAY_NETWORK = os.getenv("CRYPTOPAY_NETWORK", "mainnet")  # mainnet или testnet
+
     # Bot Settings
     BOT_NAME = os.getenv('BOT_NAME', 'TelegramBot')
